@@ -73,7 +73,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--deck", required=True)
     ap.add_argument("--type", required=True)
-    ap.add_argument("--body", required=True)
+    ap.add_argument("--body", default="",
+                    help="正文。超长（>100KB）改用 --body-file，"
+                         "否则会撞上单参数 128KB 上限")
+    ap.add_argument("--body-file", default="",
+                    help="从文件读正文（UTF-8）。长文/整篇保留必须用它："
+                         "命令行单参数上限 128KB，超了会 OSError")
     ap.add_argument("--source", required=True)
     ap.add_argument("--note", default="")
     ap.add_argument("--skin", default="")
@@ -88,6 +93,15 @@ def main():
     if a.type not in TYPES:
         fail(f"类型「{a.type}」不在九个值里。只能是：{' / '.join(TYPES)}\n"
              f"      判不准就先读 references/类型与版式.md")
+
+    # ── 0.5 正文来源：--body 或 --body-file，必须给一个 ─────
+    if a.body_file:
+        try:
+            a.body = open(a.body_file, encoding="utf-8").read()
+        except OSError as e:
+            fail(f"读不了 --body-file「{a.body_file}」：{e}")
+    if not (a.body or "").strip():
+        fail("正文是空的。用 --body 传字符串，长文用 --body-file /路径/文件.html")
 
     # ── 1b. 出处：不能是占位符 ──────────────────────────────
     # 出处是卡片顶部的标题。历史上有 137 张卡的出处被填成了牌组名「一句话」，
