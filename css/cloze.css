@@ -1,0 +1,90 @@
+/* ══ 挖空 · 空位与答案 ════════════════════════════════════════════════
+   这一段要追加在 24 套版式之后（复用同一套令牌层与纸色，不另起视觉语言）。
+
+   Anki 原生挖空在两端吐出的 HTML —— 下面是实测结果，不是推测：
+
+     正面   <span class="cloze" data-cloze="书店" data-ordinal="1">[...]</span>
+     背面   <span class="cloze" data-ordinal="1">书店</span>
+     非当前处（正背面都一样）
+            <span class="cloze-inactive" data-ordinal="2">纸</span>
+
+   关键发现：data-cloze 属性**只在正面出现** —— Anki 顺手把答案塞进了属性里。
+   于是「空位」和「答案」可以用纯 CSS 分开，一行 JS 都不需要：
+
+     .card .cloze[data-cloze]        空位
+     .card .cloze:not([data-cloze])  答案
+
+   空位为什么是 inline-block + 固定最小宽度：
+   Anki 塞在空位里的是 [...] 五个拉丁字符，宽度约 2.5em。第一版让它透明、
+   只留底色，实测**几乎看不见** —— 读者会以为卡片掉字了，而不是「这里有个空」。
+   改成 inline-block + min-width 之后，空位有一个**与答案长短无关的固定宽度**：
+   既像一道填空题的横线，又顺手堵住了「答案有多长」这条线索。
+   用 inline-block 而不是 inline，还保证空位不会被折行切成两半。
+
+   老客户端若不吐 data-cloze，会落到下面第一条兜底规则上，两端同款也看得过去。
+   ───────────────────────────────────────────────────────────────── */
+
+.card .cloze{
+  /* 兜底：不区分正背面时，两端共用这一条 */
+  color:var(--accent);font-weight:500;
+  background:rgba(176,141,87,.16);
+  border-bottom:var(--w-2) solid var(--accent);
+  padding:0 5px;border-radius:3px;
+  -webkit-box-decoration-break:clone;box-decoration-break:clone;
+}
+
+.card .cloze[data-cloze]{                 /* ── 空位 ── */
+  display:inline-block;
+  box-sizing:border-box;
+  min-width:4.2em;                        /* 与答案长短无关的固定宽度 */
+  line-height:1;                          /* 必须压掉 —— .body 的行高是 42px，
+                                             inline-block 会照着 42px 撑成一个方框，
+                                             比字高出整整一倍，像贴了张便签 */
+  color:transparent;                      /* 藏掉 [...]，宽度留着 */
+  background:rgba(176,141,87,.12);
+  border-bottom:var(--w-2) solid var(--accent);
+  padding:2px 6px;margin:0 3px;
+  border-radius:3px;
+  vertical-align:-.12em;
+}
+
+.card .cloze:not([data-cloze]){           /* ── 答案 ── */
+  color:var(--accent);font-weight:600;
+  padding:0 5px;margin:0 2px;border-radius:3px;
+}
+
+/* 能用 color-mix 的客户端：底色跟着各版式的 --accent 走，
+   24 套版式（朱红 / 竹青 / 石青 / 碑墨…）各自协调，不用写 24 条。 */
+@supports (background:color-mix(in srgb,red 10%,transparent)){
+  .card .cloze{background:color-mix(in srgb,var(--accent) 17%,transparent)}
+  .card .cloze[data-cloze]{background:color-mix(in srgb,var(--accent) 13%,transparent)}
+}
+
+/* 非当前处：正背面都出现。它只是上下文，不是考点 —— 压成安静的灰，
+   用一条点线留个「这里也曾挖过」的痕，别和当前的空位抢注意力。 */
+.card .cloze-inactive{
+  color:var(--ink2);font-weight:inherit;
+  background:none;
+  border-bottom:var(--w-1) dotted var(--line);
+}
+
+/* 夜间模式：深纸上 13% 的 accent 几乎化掉，得把浓度提上去。
+   .card.nightMode 与 .nightMode .card 两种挂法都覆盖（各端不一致）。 */
+.card.nightMode .cloze,.nightMode .card .cloze,
+.night_mode .cloze,.night_mode .card .cloze{
+  background:rgba(201,164,106,.28);
+}
+.card.nightMode .cloze[data-cloze],.nightMode .card .cloze[data-cloze],
+.night_mode .cloze[data-cloze],.night_mode .card .cloze[data-cloze]{
+  background:rgba(201,164,106,.22);
+}
+@supports (background:color-mix(in srgb,red 10%,transparent)){
+  .card.nightMode .cloze,.nightMode .card .cloze,
+  .night_mode .cloze,.night_mode .card .cloze{
+    background:color-mix(in srgb,var(--accent) 30%,transparent);
+  }
+  .card.nightMode .cloze[data-cloze],.nightMode .card .cloze[data-cloze],
+  .night_mode .cloze[data-cloze],.night_mode .card .cloze[data-cloze]{
+    background:color-mix(in srgb,var(--accent) 28%,transparent);
+  }
+}

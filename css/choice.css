@@ -1,0 +1,159 @@
+/* ══ 交互区 · 选择题 ══════════════════════════════════════════════════
+   与版式**解耦**：这一段不引用任何 .skin-* ，只吃令牌层 + 自己的一组语义色。
+   24 套版式各自换纸色与强调色，交互区不受影响 ——
+   所以「24 套全部支持交互」不需要写 24 条规则。
+
+   语义色（对/漏/错）不走 --accent：
+   纸色是暖调时，跟着版式走的「错误色」会变成同色系，红绿分不出来。
+   这四个是**功能色**，只保证语义，不参与版式轮换。
+
+   ⚠ 夜间模式必须单独给一组 —— 深纸上 rgba(...,.10) 的底色会化掉，
+     而且浅色的 #3F6B4A 在深底上对比度不足。
+   ───────────────────────────────────────────────────────────────── */
+
+/* 判定底色的透明度是真机测出来的，不是拍脑袋：
+   2026-09-18 手机实拍 —— .10 在 390px 屏上等于没有底色，
+   用户选错后只看到「答案跳到了 B」，察觉不到自己那行被判错。
+   提到 .20 才在日光下看得见，同时不压住 #26241F 的正文。 */
+.quiz{
+  --q-edge:var(--accent);
+  --q-pick-bg:rgba(176,141,87,.10);
+  --q-hit:#3F6B4A;   --q-hit-bg:rgba(63,107,74,.20);
+  --q-miss:#8A6A20;  --q-miss-bg:rgba(138,106,32,.22);
+  --q-wrong:#9C3A30; --q-wrong-bg:rgba(156,58,48,.20);
+
+  margin-top:var(--sp-4);
+}
+
+/* 选项源码容器：只给 JS 读，不上屏 */
+.quiz-src{ display:none !important; }
+
+/* ── 安全网 ──
+   JS 一旦跑起来会立刻给 .quiz 打上 data-ready。
+   万一这段 JS 没执行（客户端禁用脚本 / 模板被裁），
+   下面的规则会把选项源码以纯文本露出来 ——
+   难看，但比「选项整块消失、卡片只剩题干」强得多。 */
+.quiz:not([data-ready]) .quiz-src{
+  display:block !important;
+  font-family:inherit;
+  font-size:var(--fs-2); line-height:var(--lh-3);
+  color:var(--ink2);
+  white-space:pre-wrap; margin:0;
+}
+
+.quiz-list{ display:flex; flex-direction:column; gap:var(--sp-1); }
+
+.quiz-opt{
+  display:flex; align-items:baseline; gap:var(--sp-2);
+  padding:var(--sp-1) var(--sp-2);
+  border:var(--w-1) solid var(--line);
+  border-radius:6px;
+  background:transparent;
+  color:var(--ink);
+  font-size:var(--fs-3); line-height:var(--lh-3);
+  text-align:left;
+  cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+  transition:border-color .12s ease, background-color .12s ease, opacity .12s ease;
+}
+.quiz-opt:hover{ border-color:var(--q-edge); }
+
+.quiz-key{ flex:none; min-width:1.7em; color:var(--ink3);
+  font-size:var(--fs-2); line-height:var(--lh-3);
+  font-variant-numeric:tabular-nums; letter-spacing:.02em; }
+.quiz-txt{ flex:1 1 auto; }
+/* 1em 装不下 ✗（真机实拍：字符被右边切掉半个）。
+   改成 2.4em —— 单选答错时要放「答案」/「你选」两个汉字。 */
+.quiz-mark{ flex:none; min-width:2.4em; text-align:right;
+  font-size:var(--fs-2); font-weight:600; }
+
+/* ── 已选 ── */
+.quiz-opt.is-picked{ border-color:var(--q-edge); background:var(--q-pick-bg); }
+.quiz-opt.is-picked .quiz-key{ color:var(--accent); }
+
+/* ── 排除法（双击 / 右键 / 长按） ── */
+.quiz-opt.is-excluded{ opacity:.45; }
+.quiz-opt.is-excluded .quiz-txt{ text-decoration:line-through; }
+
+/* ── 判定 ──
+   边框视觉加粗到 2px，但用 inset 阴影叠：改 border-width 会让整行内容跳 1px，
+   判定上色那一刻整块选项会抖一下。 */
+.quiz-opt.is-hit{ border-color:var(--q-hit); background:var(--q-hit-bg);
+  box-shadow:inset 0 0 0 var(--w-1) var(--q-hit); }
+.quiz-opt.is-hit .quiz-mark{ color:var(--q-hit); }
+
+.quiz-opt.is-miss{ border-color:var(--q-miss); background:var(--q-miss-bg);
+  box-shadow:inset 0 0 0 var(--w-1) var(--q-miss); }
+.quiz-opt.is-miss .quiz-mark{ color:var(--q-miss); }
+
+.quiz-opt.is-wrong{ border-color:var(--q-wrong); background:var(--q-wrong-bg);
+  box-shadow:inset 0 0 0 var(--w-1) var(--q-wrong); }
+.quiz-opt.is-wrong .quiz-mark{ color:var(--q-wrong); }
+.quiz-opt.is-wrong .quiz-txt{
+  text-decoration:line-through; text-decoration-color:var(--q-wrong); }
+
+/* 单选答错时正确答案那行：走 hit 的绿，但文案是「答案」不是「✓」。
+   颜色之外还有文字和删除线兜底 —— 红绿色盲也能分清谁是谁。 */
+.quiz-opt.is-answer .quiz-mark{ letter-spacing:0; font-weight:700; }
+
+/* ── 页脚 ── */
+.quiz-foot{ display:flex; align-items:center; gap:var(--sp-2);
+  flex-wrap:wrap; margin-top:var(--sp-2); }
+.quiz-count{ font-size:var(--fs-2); line-height:var(--lh-2);
+  color:var(--ink3); letter-spacing:.06em; }
+.quiz-count.is-correct{ color:var(--q-hit); }
+.quiz-count.is-missed{ color:var(--q-miss); }
+.quiz-count.is-wrong{ color:var(--q-wrong); }
+.quiz-count.is-reveal{ color:var(--ink3); }
+
+/* 对照行：单选答错时把「你选 C · 答案 B」写出来。
+   不写这句，用户得自己回忆刚才点的是哪一个 —— 真机反馈就是这个。 */
+.quiz-echo{ font-size:var(--fs-2); line-height:var(--lh-2);
+  color:var(--ink2); letter-spacing:.04em;
+  margin-left:auto; text-align:right; }
+.quiz-echo:empty{ display:none; }
+
+.quiz-btn{
+  margin-left:var(--sp-2);
+  font-family:inherit; font-size:var(--fs-2); line-height:var(--lh-2);
+  padding:4px var(--sp-2);
+  color:var(--accent);
+  background:transparent;
+  border:var(--w-1) solid var(--accent);
+  border-radius:99px;
+  cursor:pointer; letter-spacing:.06em;
+  -webkit-tap-highlight-color:transparent;
+}
+.quiz-btn:hover{ background:var(--q-pick-bg); }
+
+/* 选项超过 26 个时的显式提示 —— 写卡的人要看见，不能静默吞掉 */
+.quiz-warn{
+  font-size:var(--fs-2); line-height:var(--lh-2);
+  color:var(--q-wrong);
+  border-left:var(--w-2) solid var(--q-wrong);
+  padding-left:var(--sp-2);
+}
+
+/* 能用 color-mix 的客户端：选中底色跟着版式强调色走 */
+@supports (background:color-mix(in srgb,red 10%,transparent)){
+  .quiz{ --q-pick-bg:color-mix(in srgb,var(--accent) 13%,transparent); }
+}
+
+/* ── 夜间模式 ── */
+.card.nightMode .quiz,.nightMode .card .quiz,
+.night_mode .quiz,.night_mode .card .quiz{
+  --q-pick-bg:rgba(201,164,106,.20);
+  --q-hit:#7FB08C;   --q-hit-bg:rgba(127,176,140,.16);
+  --q-miss:#D3AE63;  --q-miss-bg:rgba(211,174,99,.16);
+  --q-wrong:#E08379; --q-wrong-bg:rgba(224,131,121,.16);
+}
+@supports (background:color-mix(in srgb,red 10%,transparent)){
+  .card.nightMode .quiz,.nightMode .card .quiz,
+  .night_mode .quiz,.night_mode .card .quiz{
+    --q-pick-bg:color-mix(in srgb,var(--accent) 22%,transparent);
+  }
+}
+
+/* ── 移动端 ── */
+.mobile .quiz-opt{ font-size:17px; line-height:32px; padding:6px var(--sp-2); }
+.mobile .quiz{ margin-top:var(--sp-3); }

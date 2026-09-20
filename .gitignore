@@ -1,0 +1,30 @@
+# 敏感：任何含真实凭据 / IP / 域名的文件都不要提交
+*credential*
+*.env
+config.json
+syncserver.env
+secrets.*
+
+# Python
+__pycache__/
+*.pyc
+*.py[cod]
+.venv/
+venv/
+
+# Anki 数据（绝不提交 collection）
+*.anki2
+*.anki2-wal
+*.anki2-shm
+*.apkg
+backups/
+
+# 编辑器和系统
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# 临时输出
+/tmp/
+output/

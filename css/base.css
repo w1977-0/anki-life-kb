@@ -1,0 +1,333 @@
+/* ═══════════════════════════════════════════════════════════════════
+   版式系统 v6.1 · 4 套（复刻 Quizify 2 套 + 按内容类型补位 2 套）
+
+   内容类型映射：
+     开务 kaiwu   知识 / 概念 / 方法   （Quizify 现代 Knowledge Canvas）
+     格致 gezhi   典故 / 文言 / 观点   （Quizify 复古）
+     纸白 paper   长文摘录 / 场景      （补位：Quizify 两套都没为长文做行基准线）
+     便签 memo    短句 / 金句          （补位：短内容需要大字与留白）
+
+   ── 三段拼装（改 CSS 时必须知道）────────────────────────────────
+     生活摘录 / 生活挖空 CSS = 本文件  + cloze.css
+     生活选择 CSS           = 本文件  + choice.css
+   追加层写在后面，所以它的规则**赢**（除非本文件用了更高特异性）。
+   本文件因此**不定义任何 .quiz*** —— 交互区归 choice.css 独有。
+
+   ── 令牌为什么挂在 :root，不能挂 .pg ────────────────────────────
+   CSS 变量只向下继承。桌面色 --desk 要被 .card（Anki 容器）用到，
+   而 .card 是 .pg 的**祖先** —— 挂在 .pg 上，.card 读到的就是未定义，
+   background-color 直接失效，卡片会掉进 Anki 默认的白底上。
+   旧版（24 套）挂 .card 是同理。:root 比 .card 更安全：
+   body 也能读到。
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 令牌层（默认 = 开务）───────────────────────────────────────── */
+:root {
+  /* 色 —— 取自 Quizify 1.2 的 :root，逐个核对过原值 */
+  --paper: #fffefa;          /* Quizify --q-surface  象牙白卡片 */
+  --desk: #f2f0e9;           /* Quizify --q-bg       暖灰桌面 */
+  --ink: #202927;            /* --q-text */
+  --ink2: #35413e;           /* --q-text-soft */
+  --ink3: #697570;           /* --q-muted */
+  --line: #e1e5df;           /* --q-border */
+  --accent: #147d72;         /* --q-primary  青绿 */
+  --accent2: #d77a42;        /* --q-accent   赭橙 */
+
+  /* 排版尺度 —— 追加层会用到 fs-3 / lh-3 / w-2，不能省 */
+  --fs-1: 12px; --fs-2: 14px; --fs-3: 15px; --fs-body: 17px; --fs-5: 20px;
+  --lh-1: 20px; --lh-2: 24px; --lh-3: 26px; --lh-body: 29px; --lh-5: 32px;
+  --sp-1: 6px;  --sp-2: 12px; --sp-3: 18px; --sp-4: 24px; --sp-5: 32px;
+  --pad-t: 28px; --pad-r: 26px; --pad-b: 32px; --pad-l: 26px;
+  --w-1: 1px;   --w-2: 2px;
+  --align: left;
+  --radius: 18px;            /* --q-radius */
+
+  --font: "Aptos", "Inter", "SF Pro Text", ui-sans-serif, system-ui,
+          -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* ── 压掉 Anki 自带的卡片样式 ────────────────────────────────────
+   各端会在 .card 上塞 text-align:center / background-color:#fff，
+   不显式重置的话桌面端和移动端会长得不一样。                      */
+.card {
+  text-align: left !important;
+  background-color: var(--desk) !important;
+  padding: 22px 14px;
+}
+.card > * { box-sizing: border-box; }
+body { margin: 0; padding: 0; }
+
+/* ── 卡片本体 ────────────────────────────────────────────────────
+   最后一层 box-shadow 是「桌布」：0 0 0 100vmax 的扩散阴影从卡片
+   向外铺满整个视口，颜色取 --desk。
+   用它而不是 .card 的背景色，是因为 --desk 是**每套版式各自不同的**，
+   而版式类挂在 .pg 上 —— .card 是祖先，读不到 .pg 的变量。
+   （box-shadow 不参与布局，不会撑出滚动条。）                     */
+.pg {
+  position: relative;
+  max-width: 660px;
+  margin: 0 auto;
+  padding: var(--pad-t) var(--pad-r) var(--pad-b) var(--pad-l);
+  background: var(--paper);
+  border-radius: var(--radius);
+  box-shadow:
+    0 30px 80px rgba(40, 57, 51, .12),
+    0 4px 16px rgba(40, 57, 51, .06),
+    0 0 0 100vmax var(--desk);
+  font-family: var(--font);
+  color: var(--ink);
+  text-align: left;
+}
+
+/* ── 骨架（四套共用，只吃令牌）────────────────────────────────── */
+.pg .runner {
+  display: flex; align-items: center; gap: var(--sp-2);
+  font-size: var(--fs-1); line-height: var(--lh-1);
+  letter-spacing: .16em; color: var(--ink3);
+  margin-bottom: var(--sp-2);
+}
+.pg .runner .kind { color: var(--accent); }
+.pg .runner .date { margin-left: auto; letter-spacing: .08em; }
+
+.pg .rule {
+  display: flex; align-items: center; gap: var(--sp-1);
+  margin: 0 0 var(--sp-4);
+}
+.pg .rule::before, .pg .rule::after {
+  content: ""; flex: 1; height: var(--w-1); background: var(--line);
+}
+.pg .rule i {
+  width: 6px; height: 6px; background: var(--accent);
+  transform: rotate(45deg); flex: none;
+}
+
+.pg .title {
+  font-size: var(--fs-5); line-height: var(--lh-5);
+  text-align: var(--align); color: var(--ink);
+  margin-bottom: var(--sp-3);
+}
+/* 出处为空时的占位标题 —— 压成安静的说明文字，不要抢正文 */
+.pg .title.faint {
+  color: var(--ink3); font-size: var(--fs-3); line-height: var(--lh-3);
+  letter-spacing: .3em; font-weight: 400;
+}
+
+.pg .body {
+  font-size: var(--fs-body); line-height: var(--lh-body);
+  letter-spacing: .01em; color: var(--ink2);
+}
+.pg .body p { margin: 0 0 var(--sp-2); }
+.pg .body p:last-child { margin-bottom: 0; }
+
+.pg .tail {
+  margin-top: var(--sp-5); text-align: center;
+  letter-spacing: .5em; color: var(--line); font-size: var(--fs-1);
+}
+
+/* ── 答案面专属：出处 / 我的话 ────────────────────────────────── */
+.pg .src {
+  margin-top: var(--sp-3);
+  font-size: var(--fs-2); line-height: var(--lh-2);
+  letter-spacing: .04em; color: var(--ink3);
+  text-align: right;                 /* 署名惯例：靠右 */
+}
+.pg .note {
+  margin-top: var(--sp-3);
+  padding: 0 0 0 var(--sp-2);
+  border-left: var(--w-2) solid var(--accent);
+  font-size: var(--fs-3); line-height: var(--lh-3);
+  color: var(--ink2); text-align: left;
+}
+
+/* ── 装饰件：默认全关，各版式按需打开 ───────────────────────────
+   模板里 .tape / .stamp / .seal / .wave / .mark 一直存在，
+   没有规则就会以浏览器默认样式裸奔（.stamp 和 .seal 都会各吐一遍
+   「类型」文字）。所以必须显式关掉，而不是「反正没定义」。        */
+.pg .tape, .pg .stamp, .pg .seal, .pg .wave { display: none; }
+.pg .mark { display: none; }
+
+/* ═══ 1. 开务 —— 复刻 Quizify 现代（Knowledge Canvas）═════════════
+   原值：surface #fffefa / primary #147d72 / accent #d77a42 / radius 18px
+   适用：知识、概念、方法。无衬线、大圆角、柔和长阴影。            */
+.skin-kaiwu {
+  --desk: #f2f0e9;
+  --radius: 18px;
+}
+
+/* ═══ 2. 格致 —— 复刻 Quizify 复古 ═══════════════════════════════
+   原值：蓝灰主色、象牙白卡、赭色点缀、衬线、四边细框
+   适用：典故、文言、观点。行高更松，圆角收到 4px。                */
+.skin-gezhi {
+  --paper: #fffef9;
+  --desk: #e8e4da;
+  --ink: #2f3330;
+  --ink2: #4a4f4c;      /* 蓝灰正文 */
+  --ink3: #857f72;
+  --line: #ddd8cc;
+  --accent: #5e7987;    /* 蓝灰主色 */
+  --accent2: #a8632c;   /* 赭色点缀 */
+  --fs-body: 17px; --lh-body: 32px;
+  --radius: 4px;
+  --font: "Songti SC", "Source Serif SC", "Noto Serif CJK SC",
+          Georgia, "Times New Roman", serif;
+  border: var(--w-1) solid #d9d3c6;   /* 四边细框 —— 格致的签名 */
+}
+
+/* ═══ 3. 纸白 —— 补位：长文摘录 ══════════════════════════════════
+   缺口：Quizify 两套都是「卡片感」，长文（100–150 字）塞进去行距偏紧、
+        版心偏窄、没有行基准线，读两段就散。
+   做法：纯白纸、衬线、行高 30px、**横线背景与行高对齐**、版心放宽。 */
+.skin-paper {
+  --paper: #ffffff;
+  --desk: #eceae5;
+  --ink: #23282b;
+  --ink2: #3f4649;
+  --ink3: #7d8386;
+  --line: #e4e2dc;
+  --accent: #3d6fc2;    /* Quizify --q-info */
+  --accent2: #a66716;
+  --fs-body: 16px; --lh-body: 30px;
+  --fs-5: 18px;    --lh-5: 28px;
+  --pad-t: 26px; --pad-r: 22px; --pad-b: 30px; --pad-l: 22px;  /* 版心更宽 */
+  --radius: 6px;
+  --font: "Songti SC", "Source Serif SC", Georgia, serif;
+}
+.skin-paper .body {
+  background-image: repeating-linear-gradient(
+    to bottom, transparent 0 29px, var(--line) 29px 30px);
+  /* 横线步长 30px = 行高，字压在线上而不是线间 */
+  padding-left: 2px;
+}
+
+/* ═══ 4. 便签 —— 补位：短句 / 金句 ═══════════════════════════════
+   缺口：20 字的金句放进通用版式，四周全是空白，字号也不够跳，
+        「金句」读起来像普通一句话。
+   做法：米黄便签、等宽字、正文跳到 20px、**整体居中**、留白收紧、
+        顶部一条半透明胶带。
+   居中只在这套开：正文是 1–2 行的短句，居中不会逼读者每行找起点。 */
+.skin-memo {
+  --paper: #fbf3dc;
+  --desk: #e6dfcd;
+  --ink: #3a3527;
+  --ink2: #4e4838;
+  --ink3: #8b8062;
+  --line: #e3d9ba;
+  --accent: #b08d57;
+  --accent2: #c9a227;
+  --fs-body: 20px; --lh-body: 34px;
+  --fs-5: 15px;    --lh-5: 24px;
+  --pad-t: 34px; --pad-r: 26px; --pad-b: 34px; --pad-l: 26px;
+  --align: center;
+  --radius: 2px;
+  --font: ui-monospace, "SFMono-Regular", Menlo, "PingFang SC", monospace;
+}
+.skin-memo .body { letter-spacing: .02em; text-align: left; }
+.skin-memo .title { color: var(--ink3); font-size: var(--fs-2); }
+/* 胶带 —— 唯一一套打开装饰件的版式 */
+.skin-memo .tape {
+  display: block; position: absolute; top: -10px; left: 50%;
+  width: 96px; height: 24px; transform: translateX(-50%);
+  background: rgba(201, 162, 39, .45);
+  border-left: var(--w-1) solid rgba(201, 162, 39, .75);
+  border-right: var(--w-1) solid rgba(201, 162, 39, .75);
+}
+
+/* ── 移动端：版心收紧、字号不缩水 ─────────────────────────────── */
+@media (max-width: 480px) {
+  .pg { --pad-r: 18px; --pad-l: 18px; }
+  .skin-memo { --fs-body: 19px; --lh-body: 33px; }
+}
+
+/* ══ 长文排版 ═══════════════════════════════════════════════════════
+   依据是实测数据，不是猜测：
+     生活摘录「方法」类 98 张，正文均长 2190 字（中位 1142，最长 13302），
+     内容是带 <p> <ul> <li> <table> <strong> 的 HTML，不是纯文本。
+   基础层原来只给了 .body p 一条，列表 / 表格 / 强调全靠浏览器默认 ——
+   在 660px 的卡片里会崩（表格溢出、列表缩进吃掉版心、<strong> 变粗黑块）。
+   ═══════════════════════════════════════════════════════════════ */
+
+.pg .body p { margin: 0 0 var(--sp-2); }
+.pg .body p:last-child { margin-bottom: 0; }
+
+.pg .body ul, .pg .body ol {
+  margin: var(--sp-2) 0;
+  padding-left: 1.5em;          /* 不缩进到版心外 */
+}
+.pg .body li { margin: 0 0 4px; }
+.pg .body li::marker { color: var(--ink3); }
+
+.pg .body strong, .pg .body b {
+  color: var(--ink);            /* 正文是 ink2，强调提到 ink —— 有对比但不跳 */
+  font-weight: 600;
+}
+.pg .body em, .pg .body i { font-style: normal; color: var(--ink); }
+
+.pg .body a {
+  color: var(--accent); text-decoration: none;
+  border-bottom: var(--w-1) solid var(--line);
+}
+/* 链接里塞的是 b 站搜索 URL 这种长串，必须能断行，否则撑破版心 */
+.pg .body a { word-break: break-all; }
+
+.pg .body table {
+  width: 100%; border-collapse: collapse;
+  margin: var(--sp-2) 0;
+  font-size: var(--fs-2); line-height: var(--lh-2);
+}
+.pg .body th, .pg .body td {
+  border: var(--w-1) solid var(--line);
+  padding: 6px 8px; text-align: left; vertical-align: top;
+}
+.pg .body th { background: rgba(0, 0, 0, .025); color: var(--ink); font-weight: 600; }
+
+.pg .body h1, .pg .body h2, .pg .body h3, .pg .body h4 {
+  margin: var(--sp-3) 0 var(--sp-1);
+  font-size: var(--fs-3); line-height: var(--lh-3);
+  color: var(--ink); font-weight: 600;
+}
+.pg .body h1:first-child, .pg .body h2:first-child,
+.pg .body h3:first-child, .pg .body h4:first-child { margin-top: 0; }
+
+.pg .body hr {
+  border: 0; border-top: var(--w-1) solid var(--line);
+  margin: var(--sp-3) 0;
+}
+.pg .body blockquote {
+  margin: var(--sp-2) 0; padding: 0 0 0 var(--sp-2);
+  border-left: var(--w-2) solid var(--line);
+  color: var(--ink3);
+}
+
+/* 长文溢出保护：Anki 卡片不限高，但 <pre> / 长 URL / 宽表格要能被压住 */
+.pg .body img, .pg .body video { max-width: 100%; height: auto; }
+.pg .body pre { white-space: pre-wrap; word-break: break-word; }
+
+/* ══ 通读模式（单面卡）══════════════════════════════════════════════
+   正面就把内容全部展开，背面只是补一句「我的话」。
+   跟回忆卡的区别不是版式，是「有没有东西要藏」：
+     回忆卡 —— 装饰件全关（正面要干净，别抢提示）
+     通读卡 —— 装饰件打开（没有需要藏的，版式本身要撑得住）
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 大引号：句子/金句通读时打开，读起来像一页题词 */
+.mode-read .mark {
+  display: block;
+  font-family: Georgia, "Songti SC", serif;
+  font-size: 42px; line-height: .5;
+  color: var(--accent); opacity: .28;
+  height: 26px; margin-bottom: var(--sp-2);
+}
+.skin-memo.mode-read .mark { text-align: center; }
+
+/* 波浪线：正文与「我的话」之间的一道分隔 */
+.mode-read .wave {
+  display: block;
+  width: 100%; height: 8px; margin: var(--sp-3) 0 0;
+  color: var(--line);
+}
+
+/* 通读卡的正文是主角：行距比回忆卡松一档 */
+.mode-read .body { letter-spacing: .015em; }
+
+/* 没有批注时，背面和正面长得一样 —— 这是有意的，不是 bug */
+.mode-read .note { margin-top: var(--sp-3); }
