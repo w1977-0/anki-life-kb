@@ -76,10 +76,10 @@ check("自测 留空（通读）", f.get("自测") == "", repr(f.get("自测")))
 check("版式 ∈ 句子池", f.get("风格") in ("memo", "kaiwu", "paper"), repr(f.get("风格")))
 
 # ── E3 类型写错 ───────────────────────────────────────────
-print("\n【E3】类型写错 → 应拦下并列出九个值")
+print("\n【E3】类型写错 → 应拦下并列出十个值")
 code, out, _ = dry(BOOK, "金句")
 check("退出码 2", code == 2, str(code))
-check("提示里列出九个值", "不在九个值里" in out, out[:120])
+check("提示里列出十个值", "不在十个值里" in out, out[:120])
 check("提示指向 references", "类型与版式" in out, out[:120])
 
 # ── E4 牌组写错 ───────────────────────────────────────────
@@ -117,8 +117,16 @@ check("退出码 0（不拦长文）", code == 0, str(code))
 check("版式强制 paper", f.get("风格") == "paper", f"实际 {f.get('风格')}")
 check("标签含「完整保留」", "完整保留" in tags, str(tags))
 
-# ── E9 出处占位符 → 应拦下 ────────────────────────────────
-print("\n【E9】出处是占位符（一句话/未知/无）→ 应拦下")
+# ── E9 长文类型 → 通读 + 只用 paper ──────────────────────
+print("\n【E9】类型=长文 → 应通读（自测空）、版式 paper、不受 150 字限制")
+code, out, d = dry(BOOK, "长文", body="字" * 5000)
+f = d["cards"][0]["fields"] if d else {}
+check("退出码 0（长文不被拦）", code == 0, out[:120])
+check("自测 留空（通读）", f.get("自测") == "", repr(f.get("自测")))
+check("版式 = paper", f.get("风格") == "paper", f"实际 {f.get('风格')}")
+
+# ── E10 出处占位符 → 应拦下 ───────────────────────────────
+print("\n【E10】出处是占位符（一句话/未知/无）→ 应拦下")
 code, out, _ = dry(BOOK, "句子", source="一句话")
 check("退出码 2", code == 2, str(code))
 check("提示要写真来源", "占位符" in out, out[:120])

@@ -26,7 +26,7 @@ LIVE = "/var/lib/anki-autocards/collection.anki2"
 #   只有「跌」才是事故 —— 那意味着卡片被重建过、复习历史丢了。
 EXPECT_MIN = {"notes": 3641, "cards": 6829, "revlog": 2232}
 SKINS = {"kaiwu", "gezhi", "paper", "memo"}
-TYPES = {"句子", "典故", "概念", "观点", "感悟", "方法", "场景", "事件", "里程碑"}
+TYPES = {"句子", "典故", "概念", "观点", "感悟", "方法", "场景", "事件", "里程碑", "长文"}
 RECALL = {"观点", "概念", "典故"}          # 走回忆；其余走通读
 MINE = {"生活摘录", "生活挖空", "生活选择"}
 # 旧体系残留：顶层不该再出现这些（系统默认是 Anki 的 Default，合法）
@@ -174,7 +174,7 @@ def main():
             if sk not in SKINS and not loose:
                 bad_skin.append((nid, sk))
             ty = g("类型")
-            # 只有「生活摘录」的 9 个值决定形式和版式；
+            # 只有「生活摘录」的 10 个值决定形式和版式；
             # 「生活选择」的 类型是书眉标签，允许领域标签（如行测的「常识判断」）
             if nt.startswith("生活摘"):
                 if ty not in TYPES and not loose:
@@ -198,7 +198,7 @@ def main():
         print(f"      （共 {n_mine} 条自制笔记）")
         check("风格 ∈ 四套版式", not bad_skin, f"{len(bad_skin)} 条无效"
               + (f"，例 {bad_skin[0]}" if bad_skin else ""))
-        check("类型 ∈ 九个值", not bad_type, f"{len(bad_type)} 条无效")
+        check("类型 ∈ 十个值", not bad_type, f"{len(bad_type)} 条无效")
         check("自测 与 类型 一致", not bad_self,
               f"{len(bad_self)} 条不一致" + (f"，例 {bad_self[0]}" if bad_self else ""))
         check("出处 非空", not bad_src, f"{len(bad_src)} 条为空")

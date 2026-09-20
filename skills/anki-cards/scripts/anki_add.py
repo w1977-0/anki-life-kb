@@ -30,7 +30,7 @@ ANKI_CLI = "/opt/anki-autocards/anki_cli.py"
 VENV_PY = "/opt/anki-autocards/venv/bin/python"
 CONFIG = "/etc/anki-autocards/config.json"
 
-TYPES = ["句子", "典故", "概念", "观点", "感悟", "方法", "场景", "事件", "里程碑"]
+TYPES = ["句子", "典故", "概念", "观点", "感悟", "方法", "场景", "事件", "里程碑", "长文"]
 RECALL = {"观点", "概念", "典故"}          # 走回忆；其余走通读
 SKINS = ["kaiwu", "gezhi", "paper", "memo"]
 # 每种类型的版式池，按顺序轮换（同一批卡不要连续两张用同一套）
@@ -44,6 +44,8 @@ POOL = {
     "场景":     ["paper", "gezhi", "kaiwu"],
     "事件":     ["paper", "kaiwu"],
     "里程碑":   ["kaiwu", "memo"],
+    # 长文：整篇保留的文章/章节。版心要宽，只用 paper
+    "长文":     ["paper"],
 }
 NOTETYPE = "生活摘录"
 FALLBACK_DECK = "00：系统::00.02：收件箱"
@@ -91,7 +93,7 @@ def main():
 
     # ── 1. 类型 ────────────────────────────────────────────
     if a.type not in TYPES:
-        fail(f"类型「{a.type}」不在九个值里。只能是：{' / '.join(TYPES)}\n"
+        fail(f"类型「{a.type}」不在十个值里。只能是：{' / '.join(TYPES)}\n"
              f"      判不准就先读 references/类型与版式.md")
 
     # ── 0.5 正文来源：--body 或 --body-file，必须给一个 ─────
@@ -151,8 +153,8 @@ def main():
         fail(f"版式「{skin}」无效。只能是：{' / '.join(SKINS)}")
 
     # ── 3b. 正文过长 → 提示拆分（不拦死，让用户自己判断）────
-    # --whole 跳过此检查（整篇保留是显式意图）
-    if not a.whole and len(a.body) > 150:
+    # --whole 跳过（整篇保留是显式意图）；类型=长文 也跳过（长文本来就不限字数）
+    if not a.whole and a.type != "长文" and len(a.body) > 150:
         print(f"（提醒）正文 {len(a.body)} 字，超过 150 字上限。"
               f"一个完整意思一张卡 —— 能拆就拆成两张。"
               f"如果是整篇保留，加 --whole。")
