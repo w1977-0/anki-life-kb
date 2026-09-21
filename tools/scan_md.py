@@ -50,7 +50,8 @@ def parse(path):
         if body:
             d['warn'].append('无 ### 正文 段（已回退取全文）')
 
-    d['tags'] = re.findall(r'#([^#\s\n]{1,10})#', raw)
+    # 只从「标题+正文」取标签 —— 整个 raw 含爱发电评论段，评论里的 #标签# 会串进来
+    d['tags'] = re.findall(r'#([^#\s\n]{1,10})#', (d['title'] or '') + '\n' + body)
     d['body'] = body
     d['chars'] = len(re.sub(r'\s', '', body))
     if d['chars'] < 300:
