@@ -101,10 +101,11 @@ body { margin: 0; padding: 0; }
   transform: rotate(45deg); flex: none;
 }
 
-.pg .title {
-  font-size: var(--fs-5); line-height: var(--lh-5);
-  text-align: var(--align); color: var(--ink);
-  margin-bottom: var(--sp-3);
+.pg h1.title {
+  font-size: 22px; line-height: 1.4;
+  text-align: center; color: var(--ink);
+  margin: 0 0 var(--sp-4);
+  font-weight: 700; letter-spacing: .01em;
 }
 /* 出处为空时的占位标题 —— 压成安静的说明文字，不要抢正文 */
 .pg .title.faint {
@@ -258,7 +259,7 @@ body { margin: 0; padding: 0; }
 
 .pg .body strong, .pg .body b {
   color: var(--ink);            /* 正文是 ink2，强调提到 ink —— 有对比但不跳 */
-  font-weight: 600;
+  font-weight: 700;
 }
 .pg .body em, .pg .body i { font-style: normal; color: var(--ink); }
 
@@ -284,6 +285,12 @@ body { margin: 0; padding: 0; }
   margin: var(--sp-3) 0 var(--sp-1);
   font-size: var(--fs-3); line-height: var(--lh-3);
   color: var(--ink); font-weight: 600;
+}
+/* h3 是文章内部小标题（长文里出现频率最高），单独加大让它比正文突出 */
+.pg .body h3 {
+  margin: var(--sp-4) 0 var(--sp-2);
+  font-size: 18px; line-height: 1.5; font-weight: 700;
+  color: var(--ink);
 }
 .pg .body h1:first-child, .pg .body h2:first-child,
 .pg .body h3:first-child, .pg .body h4:first-child { margin-top: 0; }
