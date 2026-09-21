@@ -34,6 +34,7 @@ def parse_toc(pdf, scan_pages=8):
         t = re.sub(r'\s*[.．·\s]*\d{1,4}\s*$', '', t)      # 尾部点线 + 页码
         t = re.sub(r'\s*[.．·]{2,}\s*$', '', t)            # 残留点线
         t = re.sub(r'^(\d{1,3})[.、]\s*', r'\1. ', t)      # 编号后补空格
+        t = re.sub(r'^标题\s*[：:]\s*', '', t)             # 目录里偶见「标题：xxx」
         return re.sub(r'\s+', ' ', t).strip()
 
     titles, cur = {}, None

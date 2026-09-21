@@ -257,10 +257,27 @@ def main():
               f"{len(broken)} 处问题" + (f"，例 {broken[0]}" if broken else ""))
 
         # ══ K 同步 ══════════════════════════════════════════
-        print("\n【K】同步")
+        print("\n【K】同步（手机看到的是副本，不只是「文件在不在」）")
         sync_path = "/var/lib/anki-autocards/sync/anki/collection.anki2"
         ok_sync = os.path.exists(sync_path)
         check("同步副本存在", ok_sync, sync_path)
+        if ok_sync:
+            try:
+                import sqlite3
+                # 副本被 syncserver 常驻占锁 → 只读快照打开，别直接连
+                s = sqlite3.connect(f"file:{sync_path}?mode=ro", uri=True)
+                for tbl in ("notes", "cards"):
+                    a = col.db.scalar(f"select count() from {tbl}")
+                    b = s.execute(f"select count() from {tbl}").fetchone()[0]
+                    check(f"副本 {tbl} 数与工作库一致", a == b,
+                          f"工作库 {a} / 副本 {b}" + ("" if a == b else f"  差 {a-b}"))
+                am = col.db.scalar("select max(mod) from notes") or 0
+                bm = s.execute("select max(mod) from notes").fetchone()[0] or 0
+                check("副本 mod 时间戳不落后", am <= bm,
+                      f"工作库 {am} / 副本 {bm}" + ("" if am <= bm else "  副本是旧的"))
+                s.close()
+            except Exception as e:
+                check("副本可读取", False, str(e)[:60])
 
         # ══ 汇总 ════════════════════════════════════════════
         print("\n" + "=" * 62)

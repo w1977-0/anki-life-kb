@@ -2,7 +2,8 @@
 """把 split_vol.py 产出的 JSON 写进 Anki（在服务器上跑）
 
 策略：按「编号」匹配已有卡片 → 更新正文；新编号 → 新建；不删任何卡（保住复习进度）
-用法: python3 write_volumes.py <卷四.json> <卷五.json> <卷六.json>
+用法: python3 write_volumes.py 一 <卷一.json> 二 <卷二.json> ...
+      （卷号与文件成对给；卷号是《…（X）》里的那个字）
 """
 import os
 import re
@@ -61,12 +62,48 @@ def run(deck_cn, json_path):
     c.close()
 
 
+SYNC = "/var/lib/anki-autocards/sync/anki/collection.anki2"
+
+
+def refresh_sync():
+    """手机同步的是副本，不刷新就永远看不到新卡。这一步必须做，别靠记性。"""
+    import sqlite3
+    import subprocess
+    subprocess.run(["systemctl", "stop", "anki-syncserver"], check=False)
+    db = sqlite3.connect(PATH)
+    db.execute("pragma wal_checkpoint(truncate)")
+    db.close()
+    for ext in ("-wal", "-shm"):                 # 让它们重建，别一起拷（会损坏）
+        if os.path.exists(SYNC + ext):
+            os.remove(SYNC + ext)
+    subprocess.run(["cp", PATH, SYNC], check=True)
+    subprocess.run(["chown", "hermes:hermes", SYNC], check=False)
+    subprocess.run(["systemctl", "start", "anki-syncserver"], check=False)
+
+    live = sqlite3.connect(PATH)
+    copy = sqlite3.connect(f"file:{SYNC}?mode=ro", uri=True)
+    print("\n=== 同步副本 ===")
+    ok = True
+    for t in ("notes", "cards"):
+        a = live.execute(f"select count() from {t}").fetchone()[0]
+        b = copy.execute(f"select count() from {t}").fetchone()[0]
+        ok &= (a == b)
+        print(f"  {t}: 工作库 {a} / 副本 {b}  {'✅' if a == b else '❌ 差 %d' % (a - b)}")
+    live.close()
+    copy.close()
+    print("  " + ("✅ 手机可同步" if ok else "❌ 副本与工作库不一致，检查上面"))
+    return ok
+
+
 def main():
-    for cn, p in zip(("四", "五", "六"), sys.argv[1:4]):
+    args = sys.argv[1:]
+    for cn, p in zip(args[0::2], args[1::2]):
         if p and os.path.exists(p):
             run(cn, p)
         else:
-            print("  跳过（无文件）:", p)
+            print("  跳过（无文件）:", cn, p)
+    print("\n刷新同步副本（手机看的是副本，不做这步等于白写）…")
+    refresh_sync()
 
 
 if __name__ == "__main__":
