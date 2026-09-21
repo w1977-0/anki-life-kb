@@ -53,6 +53,19 @@ def parse(path):
     # 只从「标题+正文」取标签 —— 整个 raw 含爱发电评论段，评论里的 #标签# 会串进来
     d['tags'] = re.findall(r'#([^#\s\n]{1,10})#', (d['title'] or '') + '\n' + body)
     d['body'] = body
+
+    # 爱发电的「## 评论」段：不是正文，但是有价值的补充，单独存起来附在正文下方
+    cm = re.search(r'^##\s*评论\s*$\s*(.*)', raw, re.M | re.S)
+    cmts = []
+    if cm:
+        for dt, who, txt in re.findall(
+                r'^#####\s*<span>\[\d+\]\s*([\d\-: ]+?)\s*by\s*(.+?)</span>\s*\n+(.*?)'
+                r'(?=^-{3,}|\Z)', cm.group(1), re.M | re.S):
+            t = txt.strip()
+            t = re.sub(r'\n\s*\n+', '\n\n', t)
+            if t:
+                cmts.append({'date': dt.strip(), 'who': who.strip(), 'text': t})
+    d['comments'] = cmts
     d['chars'] = len(re.sub(r'\s', '', body))
     if d['chars'] < 300:
         d['warn'].append(f'正文过短({d["chars"]}字)')

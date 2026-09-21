@@ -48,6 +48,19 @@ def inline(s):
     return s
 
 
+def comments_html(cmts):
+    """爱发电评论区：hr 分隔 + h3 小标题 + blockquote（左边框灰字，与正文区分）"""
+    if not cmts:
+        return ''
+    out = ['<hr>', f'<h3>评论 · {len(cmts)} 条</h3>']
+    for c in cmts:
+        who = inline(c['who'])
+        txt = md2html(c['text'])
+        txt = re.sub(r'^<p>(.*)</p>$', r'\1', txt, flags=re.S)
+        out.append(f'<blockquote><b>{who}</b> · {inline(c["date"])}<br>{txt}</blockquote>')
+    return ''.join(out)
+
+
 def md2html(body):
     """按空行分段；# 开头的行当小标题"""
     out = []
@@ -124,6 +137,10 @@ def main():
         if nk == 0:                       # 一篇都没标到 → 兜底标末段结论句
             h2 = fallback_bold(h)
             nk = h2.count('<strong>')
+        # 评论附在正文下方（不参与标黑）
+        ch = comments_html(i.get('comments') or [])
+        h2 = h2 + ch
+        plain += len(re.sub(r'<[^>]+>', '', ch))
         src = f'{title} ｜ {i["refer"]}' if i['refer'] else title
         tags = ['q9adg', i['cat']] + list(dict.fromkeys(i['tags']))
         cards.append({'deck': ROOT + '::' + i['cat'], 'cat': i['cat'],
