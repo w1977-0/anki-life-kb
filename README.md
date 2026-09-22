@@ -37,7 +37,7 @@
 | **六区牌组体系** | 编号永不回收，名字随便改 |
 | **Hermes 制卡技能** | 飞书里发一句话就能制卡（含确定性脚本） |
 | **自托管同步服务器** | 数据在自己服务器上，手机电脑随时同步 |
-| **审计与评估工具** | 25 项全局审计 + 25 项技能评估 |
+| **审计与评估工具** | 全局审计（A–K 十一组）+ 技能评估（E1–E10 / 28 条断言） |
 
 详细规范见 [`docs/`](docs/)，**从 `docs/00-总览.md` 读起**。
 
@@ -211,6 +211,7 @@ sudo /opt/anki-autocards/venv/bin/python tools/check_run.py
 .
 ├── README.md                  本文件
 ├── docs/                      规范（从 00 读起）
+│   ├── 00-README.md           文档索引 / 阅读顺序
 │   ├── 00-总览.md
 │   ├── 01-规范.md             三个笔记类型、字段、形式
 │   ├── 02-操作.md             日常怎么跑
@@ -218,14 +219,15 @@ sudo /opt/anki-autocards/venv/bin/python tools/check_run.py
 │   ├── 04-分类体系.md         六区牌组 + 判定顺序
 │   ├── 05-命名规范.md         编号 / emoji / 评级
 │   ├── 06-Hermes链路.md       七环链路 + 排障
-│   └── 07-同步服务器.md       自建同步服务器
+│   ├── 07-同步服务器.md       自建同步服务器
+│   └── 08-长文制卡.md         PDF / 长文批量制卡作业指导
 ├── skills/anki-cards/         制卡技能
 │   ├── SKILL.md               主指令（官方五段式）
 │   ├── references/            按需加载（3 个）
 │   └── scripts/anki_add.py    确定性写卡脚本
 ├── cli/anki_cli.py            Anki 命令行工具
-├── css/                       base / cloze / choice
-├── templates/                 模板快照（含 CSS）
+├── css/                       base / cloze / choice（版式样式在这里，不在模板里）
+├── templates/                 模板快照（v7-templates.json）
 ├── deploy/                    部署脚本
 └── tools/                     审计 / 评估 / 自检
 ```
@@ -259,10 +261,11 @@ python3 ~/.hermes/skills/note-taking/anki-cards/scripts/anki_add.py \
 ### 三条体检命令
 
 ```bash
-# 全局审计（25 项：数据 / 命名 / 树 / 字段 / 模板 / 渲染 / 同步）
+# 全局审计（A–K 十一组：数据基线 / 命名 / 牌组树 / 类型 / 自测一致性 /
+#           出处 / 选择题可解析 / 模板与 CSS / 真实渲染 / 同步）
 sudo /opt/anki-autocards/venv/bin/python tools/audit_system.py
 
-# 技能评估（25 项，改完技能必跑）
+# 技能评估（E1–E10 十个场景、28 条断言，改完技能必跑）
 sudo /opt/anki-autocards/venv/bin/python tools/eval_skill.py
 
 # 试车自检（一条命令判断链路断在哪一环）
