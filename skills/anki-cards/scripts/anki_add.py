@@ -83,6 +83,8 @@ def main():
                          "命令行单参数上限 128KB，超了会 OSError")
     ap.add_argument("--source", required=True)
     ap.add_argument("--note", default="")
+    ap.add_argument("--date", default="",
+                    help="日期字段。不给就自动填制卡当天（北京时间），格式 2026年9月25日")
     ap.add_argument("--skin", default="")
     ap.add_argument("--tags", default="")
     ap.add_argument("--create-deck", action="store_true")
@@ -172,13 +174,24 @@ def main():
     # ── 4. 自测：由类型推导，不用 agent 操心 ────────────────
     self_test = "自测" if a.type in RECALL else ""
 
+    # ── 4b. 日期：模型常漏，脚本兜底 ────────────────────────
+    # 2026-09-25 实测：SKILL.md 写了「日期必填」，但脚本压根没有 --date 参数，
+    # 字段被写死成 "" —— 模型想填也填不了。所以这里补上：
+    #   给了 --date → 用它；没给 → 自动填制卡当天（北京时间）
+    date = (a.date or "").strip()
+    if not date:
+        import datetime as _dt
+        _now = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8)))
+        date = f"{_now.year}年{_now.month}月{_now.day}日"
+        print(f"（日期未给，自动填制卡当天：{date}）")
+
     payload = {
         "deck": deck,
         "notetype": NOTETYPE,
         "cards": [{
             "fields": {
                 "正文": body, "出处": a.source, "我的话": a.note,
-                "类型": a.type, "风格": skin, "日期": "", "自测": self_test,
+                "类型": a.type, "风格": skin, "日期": date, "自测": self_test,
             },
             "tags": [t for t in a.tags.split(",") if t] + (["完整保留"] if a.whole else []),
         }],
