@@ -134,6 +134,21 @@ def main():
                  f"      确认真要新建（比如一本新书），加 --create-deck。")
         print(f"（将新建牌组：{deck}）")
 
+    # ── 2b. 出处与牌组是否匹配（提示，不拦死）───────────────
+    # 2026-09-25 实测：出处「观察者笔记」的卡被放进了 30.02.01：知乎。
+    # 模型自己判断不稳，所以脚本帮它照一下镜子。
+    _src = (a.source or "").strip()
+    _is_article_src = any(k in _src for k in ("知乎", "公众号"))
+    _is_article_deck = "30.02" in deck
+    if _is_article_deck and not _is_article_src:
+        print(f"（提醒）牌组是「{deck}」（文章类），但出处是「{_src}」—— 对不上。\n"
+              f"      出处不是知乎/公众号的话，通常应放 30：读过::30.05：网络碎片\n"
+              f"      或 40：记过::40.03：感悟（自己的想法）。确认没错就忽略。")
+    elif _is_article_src and not _is_article_deck:
+        print(f"（提醒）出处是「{_src}」，按规则应放 "
+              f"30：读过::30.02：文章::30.02.01：知乎，当前是「{deck}」。\n"
+              f"      确认要放这里就忽略。")
+
     # ── 3. 版式：没给就按池轮换 ────────────────────────────
     # 取模轮换：同一批卡不要连续两张用同一套版式。
     # 用牌组现有卡数当计数器 —— 不需要额外状态文件，
@@ -170,6 +185,29 @@ def main():
         body = "<p>" + "</p><p>".join(paras) + "</p>"
     elif "<p>" not in body:
         body = "<p>" + body + "</p>"
+
+    # ── 3d. 关键句标黑（脚本兜底，不靠模型自觉）─────────────
+    # 2026-09-25 用户拍板：同意由脚本自动标。
+    # 规则：
+    #   - 已经标过（有 <strong>）→ 不动，尊重模型的判断
+    #   - --whole 整篇保留 → 不标（长文不适合局部加重）
+    #   - 首段较长（>60 字）→ 只标第一句（到第一个句末标点）
+    #   - 首段较短 → 整段标黑（短句全标更醒目）
+    if "<strong>" not in body and not a.whole:
+        import re as _re
+        head, sep, tail = body.partition("</p>")
+        inner = head[3:] if head.startswith("<p>") else head
+        if inner.strip():
+            # 用「句数」判断，不用字数 —— 更符合语义：
+            #   多句 → 只标第一句（后面是补充说明，全标等于没标）
+            #   单句 → 整段标（短句全标更醒目）
+            sents = [s for s in _re.split(r"(?<=[。！？；])", inner) if s.strip()]
+            if len(sents) > 1:
+                inner = "<strong>" + sents[0] + "</strong>" + "".join(sents[1:])
+            else:
+                inner = "<strong>" + inner + "</strong>"
+            body = "<p>" + inner + "</p>" + (sep + tail if sep else "")
+            print("（已自动标黑关键句）")
 
     # ── 4. 自测：由类型推导，不用 agent 操心 ────────────────
     self_test = "自测" if a.type in RECALL else ""
