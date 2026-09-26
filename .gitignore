@@ -28,3 +28,6 @@ backups/
 # 临时输出
 /tmp/
 output/
+
+# 私有文档（00-交接详单含运维细节与飞书私有链接，绝不进 GitHub）
+docs/00-*.md
