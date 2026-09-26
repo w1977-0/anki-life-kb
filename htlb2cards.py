@@ -139,19 +139,41 @@ def main():
     ap.add_argument("--book", default="/tmp/HowToLiveBetter")
     ap.add_argument("--out", default="/tmp/htlb_p0.json")
     ap.add_argument("--only-p0", action="store_true")
+    ap.add_argument("--tier", choices=["p0", "p1", "p2", "c", "all"], default="all",
+                    help="p0=A+益大+钱0/少 / p1=A级其余 / p2=B级 / c=C级 / all=全部")
+    ap.add_argument("--skip-existing", metavar="JSON",
+                    help="跳过该 JSON 里已有的出处（用于分批续写）")
     ap.add_argument("--dry-run-5", action="store_true")
     a = ap.parse_args()
 
     items = build(a.book)
     print("解析到条目: %d" % len(items))
 
+    done_titles = set()
+    if a.skip_existing:
+        for c in json.load(open(a.skip_existing, encoding="utf-8")):
+            done_titles.add(c["fields"]["出处"])
+
     cards = []
     for d in items:
         v = d["vals"]
         is_p0 = (d["evidence"] == "A" and v.get("收益") == "大"
                  and v.get("钱") in ("0", "少"))
+        # 分档筛选
+        ev, gain_v = d["evidence"], v.get("收益")
+        if a.tier == "p0" and not is_p0:
+            continue
+        elif a.tier == "p1" and not (ev == "A" and not is_p0):
+            continue
+        elif a.tier == "p2" and ev != "B":
+            continue
+        elif a.tier == "c" and ev != "C":
+            continue
         if a.only_p0 and not is_p0:
             continue
+        if a.skip_existing:
+            if d["title"] in done_titles or make_question(d["title"], classify(d["title"])[0]) in done_titles:
+                continue
         ctype, atype = classify(d["title"])
         body = d["plain"] or d["gain"]
         num = first_number_sentence(d["gain"])
