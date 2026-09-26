@@ -106,7 +106,13 @@ def make_question(title, ctype):
         m = re.match(r"^(不要|别)(.+)$", title)
         if m:
             return "%s，值不值得做？" % m.group(2).strip()
-        return "%s —— 为什么？" % title
+        # 避坑类是「回忆型」，正面只显示出【处】——所以绝不能把结论写进问题。
+        # 反例（2026-09-26 抓到）：
+        #   「不采、不买、不吃野生蘑菇，任何「土办法鉴别」都不成立 —— 为什么？」
+        #   ↑「都不成立」就是答案，正面直接泄露，卡片失效。
+        # 修法：问题只取标题的第一个分句，砍掉后面的结论性补充。
+        head = re.split(r"[，,。；;]", title)[0].strip()
+        return "%s —— 为什么？" % (head or title)
     return title
 
 

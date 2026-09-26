@@ -85,6 +85,10 @@ def main():
     ap.add_argument("--note", default="")
     ap.add_argument("--date", default="",
                     help="日期字段。不给就自动填制卡当天（北京时间），格式 2026年9月25日")
+    ap.add_argument("--origin", default="",
+                    help="来源字段：期刊论文、DOI、官方文件。与 --source(出处/标题) 不是一回事")
+    ap.add_argument("--remark", default="",
+                    help="备注字段：争议、例外、适用人群、待核实事项")
     ap.add_argument("--skin", default="")
     ap.add_argument("--tags", default="")
     ap.add_argument("--create-deck", action="store_true")
@@ -206,7 +210,9 @@ def main():
                 inner = "<strong>" + sents[0] + "</strong>" + "".join(sents[1:])
             else:
                 inner = "<strong>" + inner + "</strong>"
-            body = "<p>" + inner + "</p>" + (sep + tail if sep else "")
+            # 注意：head 里的 <p> 已被剥离并重新加上，sep 就是原来的 </p>，
+            # 再追加会变成 </p></p>（2026-09-26 实测踩到，只在"正文自带 <p>"时触发）
+            body = "<p>" + inner + "</p>" + tail
             print("（已自动标黑关键句）")
 
     # ── 4. 自测：由类型推导，不用 agent 操心 ────────────────
@@ -230,6 +236,7 @@ def main():
             "fields": {
                 "正文": body, "出处": a.source, "我的话": a.note,
                 "类型": a.type, "风格": skin, "日期": date, "自测": self_test,
+                "来源": a.origin, "备注": a.remark,
             },
             "tags": [t for t in a.tags.split(",") if t] + (["完整保留"] if a.whole else []),
         }],
