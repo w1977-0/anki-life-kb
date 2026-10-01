@@ -1,0 +1,442 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""2026-10-02 技能补丁（第四批）—— 两处修复。
+
+1. ocr.py 加尺寸保护：大图不再放大（把 1688x1200 的切片放大成 3376x2400
+   导致 OCR 卡死跑不完，实测踩到）
+2. anki_add.py 记录每次调用到 ~/.hermes/logs/anki_add.log
+   —— 用来查清「agent 说填了 origin，卡片里却是空」到底哪一环漏了
+
+跑法：sudo python3 /tmp/patch_skill4.py
+"""
+import datetime, os, py_compile, shutil
+
+OCR_PY = "/opt/anki-autocards/ocr/ocr.py"
+ANKI_ADD = "/home/hermes/.hermes/skills/note-taking/anki-cards/scripts/anki_add.py"
+TS = datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+rep = []
+
+OCR_NEW = r'''#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""把图片里的文字 OCR 出来 —— 给 agent 用的确定性脚本。
+
+用法：
+    <ocrvenv>/bin/python /opt/anki-autocards/ocr/ocr.py <图片路径>
+
+为什么要它：当前模型是纯文本模型（非 VLM），看不了图。OCR 是唯一通道。
+为什么要有正式版：2026-10-01 之前 agent 每次都去 cache/scratch 翻历次残留的
+一次性脚本（切片边界硬编码成某张图的尺寸），换张图就不灵，甚至用错 venv
+白跑 20 分钟。这里把「自动分片 + 按阅读顺序排序」固定下来。
+
+输出：先打印图片尺寸，再按 上→下 / 左→右 打印识别到的每一行，最后给行数统计。
+"""
+import os
+import sys
+
+SLICE_H = 600          # 每片高度（像素）
+OVERLAP = 50           # 相邻片重叠，避免把一行字切两半
+SCALE = 2              # 放大倍数（小字放大后识别率更高）
+
+
+def main() -> int:
+    if len(sys.argv) < 2:
+        print("用法: ocr.py <图片路径>")
+        return 2
+    path = sys.argv[1]
+    if not os.path.exists(path):
+        print("【失败】找不到图片：%s" % path)
+        return 2
+
+    try:
+        from PIL import Image
+        from rapidocr_onnxruntime import RapidOCR
+    except Exception as e:
+        print("【失败】OCR 依赖缺失：%s" % e)
+        print("  必须用装了 rapidocr 的那个 venv 跑（见 SKILL.md 的图片那一节）")
+        return 3
+
+    engine = RapidOCR()
+    img = Image.open(path).convert("RGB")
+    W, H = img.size
+    # ⚠️ 大图不要再放大 —— 2026-10-02 踩过：把已经是 1688x1200 的切片
+    # 又放大 2 倍成 3376x2400，OCR 直接卡死跑不完
+    scale = SCALE if W <= 1200 else 1
+    print("图片尺寸: %dx%d（放大 %dx）" % (W, H, scale))
+
+    lines = []
+    y = 0
+    idx = 0
+    while y < H:
+        y1 = min(y + SLICE_H, H)
+        crop = img.crop((0, y, W, y1))
+        crop = crop.resize((crop.width * scale, crop.height * scale), Image.LANCZOS)
+        tmp = "/tmp/_ocr_slice_%d.png" % idx
+        crop.save(tmp)
+
+        res, _ = engine(tmp)
+        if res:
+            items = []
+            for item in res:
+                try:
+                    box, text, score = item[0], item[1], float(item[2])
+                except Exception:
+                    continue
+                if not text:
+                    continue
+                ys = sorted(float(p[1]) for p in box)
+                xs = sorted(float(p[0]) for p in box)
+                items.append((ys[0] / scale + y, xs[0] / scale, text.strip()))
+            # 按 行（12 像素为一档，容忍轻微基线差）→ 列 排序
+            items.sort(key=lambda t: (round(t[0] / 12.0), t[1]))
+            lines.extend(t[2] for t in items)
+
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        if y1 >= H:
+            break
+        y = y1 - OVERLAP          # 往回退一点，防止切行
+        idx += 1
+
+    # 相邻重复行去掉（重叠区带来的）
+    dedup = []
+    for t in lines:
+        if not dedup or dedup[-1] != t:
+            dedup.append(t)
+
+    print("=" * 52)
+    for t in dedup:
+        print(t)
+    print("=" * 52)
+    print("共识别 %d 行" % len(dedup))
+    if not dedup:
+        print("（一个字都没识别出来 —— 可能是纯图片、分辨率太低，或语言不是中英文）")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+ADD_NEW = r'''#!/usr/bin/env python3
+"""把一段内容写成一张 Anki 卡片 —— 给 agent 用的确定性脚本。
+
+为什么不直接让 agent 写 JSON：
+  手写 heredoc JSON 是这个技能最容易出错的地方 —— 漏字段、风格拼错、
+  牌组名写错（写错不会报错，会静默建出一个野牌组）。
+  这些全是"确定性推导"，不该交给模型。
+
+所以这里做完所有易错的事，并且**任何问题都用中文打到 stdout**，
+让 agent 一眼知道下一步该干什么，不用去翻文件系统。
+
+用法：
+  python3 scripts/anki_add.py --deck <牌组> --type <类型> --body <正文> --source <出处>
+                              [--note <我的话>] [--skin <版式>] [--tags a,b]
+                              [--create-deck] [--dry-run]
+
+依赖（都在本机，不用装）：
+  /opt/anki-autocards/venv/bin/python
+  /opt/anki-autocards/anki_cli.py
+  /etc/anki-autocards/config.json
+
+退出码：0 成功 / 2 参数有问题（按提示改）/ 3 写卡失败
+"""
+import argparse
+import json
+import subprocess
+import sys
+
+ANKI_CLI = "/opt/anki-autocards/anki_cli.py"
+VENV_PY = "/opt/anki-autocards/venv/bin/python"
+CONFIG = "/etc/anki-autocards/config.json"
+
+TYPES = ["句子", "典故", "概念", "观点", "感悟", "方法", "场景", "事件", "里程碑", "长文"]
+RECALL = {"观点", "概念", "典故"}          # 走回忆；其余走通读
+SKINS = ["kaiwu", "gezhi", "paper", "memo"]
+# 每种类型的版式池，按顺序轮换（同一批卡不要连续两张用同一套）
+POOL = {
+    "句子":     ["memo", "kaiwu", "paper"],
+    "典故":     ["gezhi", "paper"],
+    "概念":     ["kaiwu", "memo", "paper"],
+    "观点":     ["gezhi", "paper", "kaiwu"],
+    "感悟":     ["memo", "gezhi", "paper"],
+    "方法":     ["kaiwu", "paper", "memo"],
+    "场景":     ["paper", "gezhi", "kaiwu"],
+    "事件":     ["paper", "kaiwu"],
+    "里程碑":   ["kaiwu", "memo"],
+    # 长文：整篇保留的文章/章节。版心要宽，只用 paper
+    "长文":     ["paper"],
+}
+NOTETYPE = "生活摘录"
+FALLBACK_DECK = "00：系统::00.02：收件箱"
+# 不能当出处的占位符 —— 出处是卡片顶部标题，写占位符显示出来毫无意义
+BAD_SOURCE = {"", "一句话", "未知", "无", "none", "None", "null", "-", "??"}
+
+
+def run_cli(args, stdin_data=None):
+    cmd = [VENV_PY, ANKI_CLI, "--config", CONFIG] + args
+    p = subprocess.run(cmd, input=stdin_data, capture_output=True, text=True, timeout=180)
+    out = p.stdout or ""
+    i = out.find("{")
+    if i < 0:
+        return None, out + p.stderr
+    try:
+        return json.loads(out[i:]), out + p.stderr
+    except Exception:
+        return None, out + p.stderr
+
+
+def fail(msg, code=2):
+    print("【没写成】" + msg)
+    sys.exit(code)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--deck", required=True)
+    ap.add_argument("--type", required=True)
+    ap.add_argument("--body", default="",
+                    help="正文。超长（>100KB）改用 --body-file，"
+                         "否则会撞上单参数 128KB 上限")
+    ap.add_argument("--body-file", default="",
+                    help="从文件读正文（UTF-8）。长文/整篇保留必须用它："
+                         "命令行单参数上限 128KB，超了会 OSError")
+    ap.add_argument("--source", required=True)
+    ap.add_argument("--note", default="")
+    ap.add_argument("--date", default="",
+                    help="日期字段。不给就自动填制卡当天（北京时间），格式 2026年9月25日")
+    ap.add_argument("--origin", default="",
+                    help="来源字段：期刊论文、DOI、官方文件。与 --source(出处/标题) 不是一回事")
+    ap.add_argument("--remark", default="",
+                    help="备注字段：争议、例外、适用人群、待核实事项")
+    ap.add_argument("--skin", default="")
+    ap.add_argument("--tags", default="")
+    ap.add_argument("--create-deck", action="store_true")
+    ap.add_argument("--whole", action="store_true",
+                    help="整篇保留（不拆、不拦 150 字、强制 paper 版式、自动加「完整保留」标签）")
+    ap.add_argument("--dry-run", action="store_true")
+    a = ap.parse_args()
+
+    # ── 1. 类型 ────────────────────────────────────────────
+    if a.type not in TYPES:
+        fail(f"类型「{a.type}」不在十个值里。只能是：{' / '.join(TYPES)}\n"
+             f"      判不准就先读 references/类型与版式.md")
+
+    # ── 0.5 正文来源：--body 或 --body-file，必须给一个 ─────
+    if a.body_file:
+        try:
+            a.body = open(a.body_file, encoding="utf-8").read()
+        except OSError as e:
+            fail(f"读不了 --body-file「{a.body_file}」：{e}")
+    if not (a.body or "").strip():
+        fail("正文是空的。用 --body 传字符串，长文用 --body-file /路径/文件.html")
+
+    # ── 1b. 出处：不能是占位符 ──────────────────────────────
+    # 出处是卡片顶部的标题。历史上有 137 张卡的出处被填成了牌组名「一句话」，
+    # 显示出来毫无意义 —— 所以这里拦死，逼模型写真来源。
+    # 实在不知道来源就写「网络」（配合 30.05：网络碎片 牌组）。
+    if (a.source or "").strip() in BAD_SOURCE:
+        fail(f"出处「{a.source}」是占位符，不能当来源。\n"
+             f"      出处要写真实来源：书名《…》/ 平台（知乎、B站、微博）/ 场景。\n"
+             f"      实在不知道 → 写「网络」，牌组用 30：读过::30.05：网络碎片。")
+
+    # ── 2. 牌组：必须真实存在 ──────────────────────────────
+    # 写错牌组名不会报错，会静默新建一个野牌组 —— 所以这里卡死
+    decks, raw = run_cli(["decks", "--all"])
+    if decks is None:
+        fail("读不到牌组列表。先跑一次：`{VENV_PY} {ANKI_CLI} --config {CONFIG} selftest`")
+    names = [d["name"] for d in decks.get("decks", [])]
+    counts = {d["name"]: d.get("cards", 0) for d in decks.get("decks", [])}
+
+    deck = a.deck
+    if deck not in names:
+        near = [n for n in names if deck[:4] in n or n[:4] in deck][:5]
+        hint = f"\n      最接近的现有牌组：{near}" if near else ""
+        if not a.create_deck:
+            fail(f"牌组「{deck}」不存在。{hint}\n"
+                 f"      拿不准就用 --deck \"{FALLBACK_DECK}\"（收件箱），之后再分流。\n"
+                 f"      确认真要新建（比如一本新书），加 --create-deck。")
+        print(f"（将新建牌组：{deck}）")
+
+    # ── 2b. 出处与牌组是否匹配（提示，不拦死）───────────────
+    # 2026-09-25 实测：出处「观察者笔记」的卡被放进了 30.02.01：知乎。
+    # 模型自己判断不稳，所以脚本帮它照一下镜子。
+    _src = (a.source or "").strip()
+    _is_article_src = any(k in _src for k in ("知乎", "公众号"))
+    _is_article_deck = "30.02" in deck
+    if _is_article_deck and not _is_article_src:
+        print(f"（提醒）牌组是「{deck}」（文章类），但出处是「{_src}」—— 对不上。\n"
+              f"      出处不是知乎/公众号的话，通常应放 30：读过::30.05：网络碎片\n"
+              f"      或 40：记过::40.03：感悟（自己的想法）。确认没错就忽略。")
+    elif _is_article_src and not _is_article_deck:
+        print(f"（提醒）出处是「{_src}」，按规则应放 "
+              f"30：读过::30.02：文章::30.02.01：知乎，当前是「{deck}」。\n"
+              f"      确认要放这里就忽略。")
+
+    # ── 3. 版式：没给就按池轮换 ────────────────────────────
+    # 取模轮换：同一批卡不要连续两张用同一套版式。
+    # 用牌组现有卡数当计数器 —— 不需要额外状态文件，
+    # 代价是删卡后会重复，但版式重复只是不好看，不是错误。
+    pool = POOL[a.type]
+    skin = a.skin
+    if a.whole:
+        # 整篇保留：强制 paper（克制横格，版心放宽，最适合长文）
+        skin = "paper"
+        if a.skin and a.skin != "paper":
+            print(f"（--whole 时强制 paper 版式，忽略 --skin {a.skin}）")
+        else:
+            print("（--whole 整篇保留，强制 paper 版式）")
+    elif not skin:
+        n = counts.get(deck, 0)
+        skin = pool[n % len(pool)]
+        print(f"（版式未指定，按版式池轮换成 {skin}：{deck} 现有 {n} 张）")
+    elif skin not in SKINS:
+        fail(f"版式「{skin}」无效。只能是：{' / '.join(SKINS)}")
+
+    # ── 3b. 正文过长 → 提示拆分（不拦死，让用户自己判断）────
+    # --whole 跳过（整篇保留是显式意图）；类型=长文 也跳过（长文本来就不限字数）
+    if not a.whole and a.type != "长文" and len(a.body) > 150:
+        print(f"（提醒）正文 {len(a.body)} 字，超过 150 字上限。"
+              f"一个完整意思一张卡 —— 能拆就拆成两张。"
+              f"如果是整篇保留，加 --whole。")
+
+    # ── 3c. 正文预处理：\n\n → </p><p>，自动包 <p> ───────────
+    # 用户用 \n\n 分段会被 HTML 折叠成空格，所以脚本代转。
+    # 已经有 <p> 标签的不动（避免双重包裹）。
+    body = a.body.strip()
+    if "<p>" not in body and "\n\n" in body:
+        paras = [p.strip() for p in body.split("\n\n") if p.strip()]
+        body = "<p>" + "</p><p>".join(paras) + "</p>"
+    elif "<p>" not in body:
+        body = "<p>" + body + "</p>"
+
+    # ── 3d. 关键句标黑（脚本兜底，不靠模型自觉）─────────────
+    # 2026-09-25 用户拍板：同意由脚本自动标。
+    # 规则：
+    #   - 已经标过（有 <strong>）→ 不动，尊重模型的判断
+    #   - --whole 整篇保留 → 不标（长文不适合局部加重）
+    #   - 首段较长（>60 字）→ 只标第一句（到第一个句末标点）
+    #   - 首段较短 → 整段标黑（短句全标更醒目）
+    if "<strong>" not in body and not a.whole:
+        import re as _re
+        head, sep, tail = body.partition("</p>")
+        inner = head[3:] if head.startswith("<p>") else head
+        if inner.strip():
+            # 用「句数」判断，不用字数 —— 更符合语义：
+            #   多句 → 只标第一句（后面是补充说明，全标等于没标）
+            #   单句 → 整段标（短句全标更醒目）
+            sents = [s for s in _re.split(r"(?<=[。！？；])", inner) if s.strip()]
+            if len(sents) > 1:
+                inner = "<strong>" + sents[0] + "</strong>" + "".join(sents[1:])
+            else:
+                inner = "<strong>" + inner + "</strong>"
+            # 注意：head 里的 <p> 已被剥离并重新加上，sep 就是原来的 </p>，
+            # 再追加会变成 </p></p>（2026-09-26 实测踩到，只在"正文自带 <p>"时触发）
+            body = "<p>" + inner + "</p>" + tail
+            print("（已自动标黑关键句）")
+
+    # ── 4. 自测：由类型推导，不用 agent 操心 ────────────────
+    self_test = "自测" if a.type in RECALL else ""
+
+    # ── 4b. 日期：模型常漏，脚本兜底 ────────────────────────
+    # 2026-09-25 实测：SKILL.md 写了「日期必填」，但脚本压根没有 --date 参数，
+    # 字段被写死成 "" —— 模型想填也填不了。所以这里补上：
+    #   给了 --date → 用它；没给 → 自动填制卡当天（北京时间）
+    date = (a.date or "").strip()
+    if not date:
+        import datetime as _dt
+        _now = _dt.datetime.now(_dt.timezone(_dt.timedelta(hours=8)))
+        date = f"{_now.year}年{_now.month}月{_now.day}日"
+        print(f"（日期未给，自动填制卡当天：{date}）")
+
+    # ── 3e. 记录本次调用（2026-10-02 加）────────────────────
+    # 目的：agent 说"我填了 origin"但卡片里是空的，日志里又查不到它调了什么。
+    # 这里把每次调用的参数落盘，下次就能直接看出到底传没传 --origin。
+    try:
+        import datetime as _dt2, os as _os2
+        _logdir = _os2.path.expanduser("~/.hermes/logs")
+        _os2.makedirs(_logdir, exist_ok=True)
+        with open(_os2.path.join(_logdir, "anki_add.log"), "a", encoding="utf-8") as _lf:
+            _lf.write(json.dumps({
+                "t": _dt2.datetime.now().isoformat(timespec="seconds"),
+                "deck": deck, "type": a.type, "source": a.source,
+                "origin": a.origin, "remark": a.remark, "note": a.note,
+                "skin": skin, "whole": a.whole, "body_len": len(a.body or ""),
+            }, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+    payload = {
+        "deck": deck,
+        "notetype": NOTETYPE,
+        "cards": [{
+            "fields": {
+                "正文": body, "出处": a.source, "我的话": a.note,
+                "类型": a.type, "风格": skin, "日期": date, "自测": self_test,
+                "来源": a.origin, "备注": a.remark,
+            },
+            "tags": [t for t in a.tags.split(",") if t] + (["完整保留"] if a.whole else []),
+        }],
+    }
+    body = json.dumps(payload, ensure_ascii=False)
+
+    if a.dry_run:
+        print("【预演，没有真写】")
+        print(body)
+        return 0
+
+    # ── 5. 写 ─────────────────────────────────────────────
+    res, raw2 = run_cli(["add", "-"], stdin_data=body)
+    if res is None:
+        fail(f"CLI 返回读不懂。原始输出：\n{raw2[-800:]}", 3)
+
+    s = res.get("summary", {})
+    if s.get("added"):
+        ent = res["added"][0]
+        print(f"【已写入】{deck}")
+        print(f"  类型 {a.type} → {'回忆' if self_test else '通读'}（自测={self_test or '空'}）| 版式 {skin}")
+        if ent.get("repairs"):
+            print(f"  工具补了：{ent['repairs']}  —— 要如实告诉用户")
+        print(f"  笔记数 {s.get('total_notes')}，已同步")
+        return 0
+
+    if res.get("skipped"):
+        why = res["skipped"][0]
+        fail(f"被查重拦下：{why.get('front', '')[:40]}…\n"
+             f"      这句话库里已经有了（查重是全库短语搜索，使用说明里的示例句也会命中）。\n"
+             f"      确认是重复的 → 直接告诉用户「这句之前记过」，不要重试。\n"
+             f"      确认不是重复 → 换一句，或让我来处理。", 3)
+
+    if res.get("failed"):
+        fail(f"写入失败：{res['failed'][0].get('reason')}\n"
+             f"      看 references/排障.md", 3)
+
+    fail("没有成功也没有报错，原始输出：\n" + raw2[-800:], 3)
+
+
+if __name__ == "__main__":
+    main()
+'''
+
+for path, content, label in ((OCR_PY, OCR_NEW, "ocr.py"), (ANKI_ADD, ADD_NEW, "anki_add.py")):
+    if not os.path.exists(path):
+        rep.append("  ✗ 找不到 %s" % path); continue
+    shutil.copy2(path, path + ".bak-" + TS)
+    open(path, "w", encoding="utf-8").write(content)
+    try:
+        py_compile.compile(path, doraise=True)
+        rep.append("  ✓ %s 已更新，语法通过（备份 .bak-%s）" % (label, TS))
+    except Exception as e:
+        rep.append("  ✗ %s 语法有错，已回滚：%s" % (label, e))
+        shutil.copy2(path + ".bak-" + TS, path)
+
+print("=" * 58)
+print("第四批补丁结果（%s）" % TS)
+print("=" * 58)
+for line in rep: print(line)
+print()
+print("重启网关：sudo systemctl restart hermes-gateway")
+print()
+print("然后用【原图】测 OCR（不要用 n_0.png 那种已放大的切片）：")
+print("  sudo -u hermes /home/hermes/.hermes/cache/scratch/ocrvenv/bin/python \\")
+print("    /opt/anki-autocards/ocr/ocr.py /home/hermes/.hermes/cache/images/<原图>.jpg")
